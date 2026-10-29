@@ -1,0 +1,9 @@
+2026/10/29 22:49:11 60000 events, 2000 queries map[as_of:818 as_recorded:506 current:593 deleted:83], ops map[chatter:33096 correct:3959 delete:3590 set:19355], history tokens per user median 85684
+2026/10/29 22:49:16 bi-temporal                          overall 1.000 map[as_of:1 as_recorded:1 current:1 deleted:1]
+2026/10/29 22:49:16 key-value, latest only               overall 0.494 map[as_of:0.24083129584352078 as_recorded:0.22924901185770752 current:1 deleted:1]
+2026/10/29 22:49:16 timestamped log (no valid time)      overall 0.860 map[as_of:0.6577017114914425 as_recorded:1 current:1 deleted:1]
+2026/10/29 22:49:18 similarity, top 1                    overall 0.181 map[as_of:0.24327628361858192 as_recorded:0.15019762845849802 current:0.013490725126475547 deleted:0.963855421686747]
+2026/10/29 22:49:21 similarity, most recent of top 5     overall 0.177 map[as_of:0.18704156479217604 as_recorded:0.17391304347826086 current:0.07419898819561552 deleted:0.8313253012048193]
+2026/10/29 22:49:23 dense similarity (GloVe SIF), top 1  overall 0.198 map[as_of:0.23838630806845965 as_recorded:0.16403162055335968 current:0.17200674536256325 deleted:0.1927710843373494]
+2026/10/29 22:49:26 dense similarity (GloVe SIF), most recent of top 5 overall 0.224 map[as_of:0.2603911980440098 as_recorded:0.18972332015810275 current:0.2057335581787521 deleted:0.1927710843373494]
+2026/10/29 22:50:03 bi-temporal (Postgres)               overall 1.000 map[as_of:1 as_recorded:1 current:1 deleted:1]

@@ -1,0 +1,8 @@
+2026/10/29 22:45:15 threshold 0.281 (train F1 0.736 at N=100)
+2026/10/29 22:45:16 N=  10 precision 0.892 recall 0.843 false-trigger 0.139 tier-1 tokens 227
+2026/10/29 22:45:19 N=  50 precision 0.836 recall 0.724 false-trigger 0.177 tier-1 tokens 1140
+2026/10/29 22:45:25 N= 100 precision 0.764 recall 0.657 false-trigger 0.243 tier-1 tokens 2272
+2026/10/29 22:45:37 N= 200 precision 0.679 recall 0.616 false-trigger 0.342 tier-1 tokens 4538
+2026/10/29 22:46:06 N= 500 precision 0.522 recall 0.520 false-trigger 0.485 tier-1 tokens 11348
+2026/10/29 22:47:08 N=1000 precision 0.436 recall 0.481 false-trigger 0.627 tier-1 tokens 22710
+2026/10/29 22:48:40 N=1520 precision 0.383 recall 0.435 false-trigger 0.677 tier-1 tokens 34506

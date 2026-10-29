@@ -1,0 +1,6 @@
+2026/10/29 22:48:48 gateway: 10 upstreams, 1520 tools, mode all
+2026/10/29 22:48:49 direct to one MCP server     conc 1 p50 162 us p99 392 us
+2026/10/29 22:48:51 through gateway (all mode)   conc 1 p50 385 us p99 787 us
+2026/10/29 22:48:51 direct to one MCP server     conc 8 p50 286 us p99 821 us
+2026/10/29 22:48:51 through gateway (all mode)   conc 8 p50 711 us p99 2049 us
+2026/10/29 22:48:52 gateway: 10 upstreams, 1520 tools, mode meta

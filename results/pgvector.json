@@ -1,0 +1,18 @@
+{
+  "ann_top10_overlap_with_exact": 0.9917844060701203,
+  "dim": 100,
+  "hnsw_build_sec": 0.375508473,
+  "in_memory_exact_ms": {
+    "p50": 0.485,
+    "p99": 0.88
+  },
+  "load_sec": 0.269847792,
+  "pgvector_ms": {
+    "p50": 0.606,
+    "p99": 1.796
+  },
+  "queries": 1911,
+  "recall5_exact": 0.652537938252224,
+  "recall5_pgvector": 0.6504447933019362,
+  "tools": 1520
+}

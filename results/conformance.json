@@ -1,0 +1,85 @@
+{
+ "mcp_sdk_version": "2.3.0",
+ "checks": [
+  {
+   "check": "stdio initialize: server name",
+   "ok": true,
+   "detail": "name='contextcache-gateway' title=None version='0.1' description=None website_url=None icons=None"
+  },
+  {
+   "check": "stdio initialize: protocol version negotiated",
+   "ok": true,
+   "detail": "2025-11-25"
+  },
+  {
+   "check": "stdio initialize: tools.listChanged",
+   "ok": true,
+   "detail": "experimental=None logging=None prompts=None resources=None tools=ToolsCapability(list_changed=True) completions=None extensions=None tasks=None"
+  },
+  {
+   "check": "meta mode lists 3 meta-tools",
+   "ok": true,
+   "detail": "['search_tools', 'load_tool', 'call_tool']"
+  },
+  {
+   "check": "search_tools returns 5 results",
+   "ok": true,
+   "detail": "[{'name': 'farm0__currency_conversion.convert', 'description': 'Convert a value from one currency to another.', 'schema_tokens': 85}]"
+  },
+  {
+   "check": "load_tool returns the full schema",
+   "ok": true,
+   "detail": "{'listed': True, 'tool': {'name': 'farm0__currency_conversion.convert', 'description': 'Convert a value from one currency to another.', 'inputSchema': {'properties': {'amount': {'description': 'The am"
+  },
+  {
+   "check": "loaded tool is listed afterwards",
+   "ok": true,
+   "detail": "['search_tools', 'load_tool', 'call_tool', 'farm0__currency_conversion.convert']"
+  },
+  {
+   "check": "call_tool proxies to the upstream server",
+   "ok": true,
+   "detail": "{\"tool\":\"currency_conversion.convert\",\"ok\":true,\"arguments\":{\"amount\":300}}"
+  },
+  {
+   "check": "loaded tool callable by its own name",
+   "ok": true,
+   "detail": "{\"tool\":\"currency_conversion.convert\",\"ok\":true,\"arguments\":{\"amount\":1}}"
+  },
+  {
+   "check": "unknown tool is a tool error, not a protocol error",
+   "ok": true,
+   "detail": "unknown tool nope__nothing"
+  },
+  {
+   "check": "all mode: paginated tools/list returns the whole catalog",
+   "ok": true,
+   "detail": "1520"
+  },
+  {
+   "check": "all mode: tool names are unique",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "all mode: call by namespaced name",
+   "ok": true,
+   "detail": "{\"tool\":\"AclApi.add_mapping\",\"ok\":true,\"arguments\":{}}"
+  },
+  {
+   "check": "http: tenant acme only sees its upstreams",
+   "ok": true,
+   "detail": "['farm0__weather_forecast', 'farm0__weather_forecast_detailed', 'farm0__detailed_weather_forecast', 'farm1__get_n_day_weather_forecast', 'farm0__weather_forecast.get_prediction', 'farm0__get_weather',"
+  },
+  {
+   "check": "http: tenant acme cannot call another tenant's upstream",
+   "ok": true,
+   "detail": "unknown tool farm2__x"
+  },
+  {
+   "check": "http: bad token is rejected",
+   "ok": true,
+   "detail": ""
+  }
+ ]
+}

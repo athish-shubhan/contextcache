@@ -1,0 +1,67 @@
+{
+  "farms": 10,
+  "rows": [
+    {
+      "path": "direct to one MCP server",
+      "op": "tools/call",
+      "concurrency": 1,
+      "calls": 4000,
+      "p50_us": 162,
+      "p99_us": 392,
+      "tools_behind": 152
+    },
+    {
+      "path": "through gateway (all mode)",
+      "op": "tools/call",
+      "concurrency": 1,
+      "calls": 4000,
+      "p50_us": 385,
+      "p99_us": 787,
+      "tools_behind": 1520
+    },
+    {
+      "path": "direct to one MCP server",
+      "op": "tools/call",
+      "concurrency": 8,
+      "calls": 4000,
+      "p50_us": 286,
+      "p99_us": 821,
+      "tools_behind": 152
+    },
+    {
+      "path": "through gateway (all mode)",
+      "op": "tools/call",
+      "concurrency": 8,
+      "calls": 4000,
+      "p50_us": 711,
+      "p99_us": 2049,
+      "tools_behind": 1520
+    },
+    {
+      "path": "gateway (meta mode)",
+      "op": "search_tools over all tools",
+      "concurrency": 1,
+      "calls": 4000,
+      "p50_us": 2976,
+      "p99_us": 11667,
+      "tools_behind": 1520
+    },
+    {
+      "path": "gateway (meta mode)",
+      "op": "load_tool",
+      "concurrency": 1,
+      "calls": 4000,
+      "p50_us": 173,
+      "p99_us": 490,
+      "tools_behind": 1520
+    }
+  ],
+  "tools_list_all_mode": {
+    "tokens": 191979,
+    "tools": 1520
+  },
+  "tools_list_meta_mode": {
+    "tokens": 168,
+    "tools": 3
+  }
+}

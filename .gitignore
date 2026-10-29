@@ -1,0 +1,4 @@
+bin/
+data/gorilla/
+data/bfcl
+*.test

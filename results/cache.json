@@ -1,0 +1,178 @@
+{
+  "all_tools_tokens": 187421,
+  "note": "30000 turns",
+  "rows": [
+    {
+      "budget_tokens": 1000,
+      "strategy": "retrieval only",
+      "needed_tool_in_context": 0.9264666666666667,
+      "mean_tool_tokens_in_context": 977.1439666666666,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 1000,
+      "strategy": "cache only: LRU",
+      "needed_tool_in_context": 0.18026666666666666,
+      "mean_tool_tokens_in_context": 923.278,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 1000,
+      "strategy": "cache only: LFU",
+      "needed_tool_in_context": 0.3012666666666667,
+      "mean_tool_tokens_in_context": 926.8714,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 1000,
+      "strategy": "cache only: W-TinyLFU",
+      "needed_tool_in_context": 0.2978,
+      "mean_tool_tokens_in_context": 977.4603,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 1000,
+      "strategy": "retrieval + LRU (half each)",
+      "needed_tool_in_context": 0.8570666666666666,
+      "mean_tool_tokens_in_context": 902.8249,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 1000,
+      "strategy": "retrieval + W-TinyLFU (half each)",
+      "needed_tool_in_context": 0.8924,
+      "mean_tool_tokens_in_context": 966.9073,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 2000,
+      "strategy": "retrieval only",
+      "needed_tool_in_context": 0.9568,
+      "mean_tool_tokens_in_context": 1974.245,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 2000,
+      "strategy": "cache only: LRU",
+      "needed_tool_in_context": 0.29046666666666665,
+      "mean_tool_tokens_in_context": 1924.5312666666666,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 2000,
+      "strategy": "cache only: LFU",
+      "needed_tool_in_context": 0.4132,
+      "mean_tool_tokens_in_context": 1931.0070666666666,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 2000,
+      "strategy": "cache only: W-TinyLFU",
+      "needed_tool_in_context": 0.3942,
+      "mean_tool_tokens_in_context": 1968.3813333333333,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 2000,
+      "strategy": "retrieval + LRU (half each)",
+      "needed_tool_in_context": 0.9292333333333334,
+      "mean_tool_tokens_in_context": 1898.6136333333334,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 2000,
+      "strategy": "retrieval + W-TinyLFU (half each)",
+      "needed_tool_in_context": 0.9296,
+      "mean_tool_tokens_in_context": 1951.4858,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 4000,
+      "strategy": "retrieval only",
+      "needed_tool_in_context": 0.9669,
+      "mean_tool_tokens_in_context": 3964.5586,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 4000,
+      "strategy": "cache only: LRU",
+      "needed_tool_in_context": 0.41236666666666666,
+      "mean_tool_tokens_in_context": 3924.4211666666665,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 4000,
+      "strategy": "cache only: LFU",
+      "needed_tool_in_context": 0.5234666666666666,
+      "mean_tool_tokens_in_context": 3928.8412,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 4000,
+      "strategy": "cache only: W-TinyLFU",
+      "needed_tool_in_context": 0.47173333333333334,
+      "mean_tool_tokens_in_context": 3947.5126333333333,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 4000,
+      "strategy": "retrieval + LRU (half each)",
+      "needed_tool_in_context": 0.9608333333333333,
+      "mean_tool_tokens_in_context": 3899.6853333333333,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 4000,
+      "strategy": "retrieval + W-TinyLFU (half each)",
+      "needed_tool_in_context": 0.9638,
+      "mean_tool_tokens_in_context": 3946.7712666666666,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 8000,
+      "strategy": "retrieval only",
+      "needed_tool_in_context": 0.9690333333333333,
+      "mean_tool_tokens_in_context": 6372.297966666667,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 8000,
+      "strategy": "cache only: LRU",
+      "needed_tool_in_context": 0.5324,
+      "mean_tool_tokens_in_context": 7915.7185,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 8000,
+      "strategy": "cache only: LFU",
+      "needed_tool_in_context": 0.6308666666666667,
+      "mean_tool_tokens_in_context": 7914.3542333333335,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 8000,
+      "strategy": "cache only: W-TinyLFU",
+      "needed_tool_in_context": 0.5748333333333333,
+      "mean_tool_tokens_in_context": 7953.8102,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 8000,
+      "strategy": "retrieval + LRU (half each)",
+      "needed_tool_in_context": 0.9744333333333334,
+      "mean_tool_tokens_in_context": 7889.5202,
+      "turns": 30000
+    },
+    {
+      "budget_tokens": 8000,
+      "strategy": "retrieval + W-TinyLFU (half each)",
+      "needed_tool_in_context": 0.9762666666666666,
+      "mean_tool_tokens_in_context": 7913.6121,
+      "turns": 30000
+    }
+  ],
+  "shift_every": 5000,
+  "tools": 1520,
+  "tools_with_queries": 728,
+  "zipf": 1
+}
