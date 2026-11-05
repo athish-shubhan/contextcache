@@ -80,7 +80,11 @@ func LoadGloVe(path string, vocab map[string]bool) (*Embedder, error) {
 		}
 		v := make([]float32, e.Dim)
 		for i, x := range fs {
-			f, _ := strconv.ParseFloat(x, 32)
+			f, err := strconv.ParseFloat(x, 32)
+			if err != nil {
+				// a corrupt file used to load as zeros without a word
+				return nil, fmt.Errorf("%s: line %d (%q): %w", path, line, w, err)
+			}
 			v[i] = float32(f)
 		}
 		e.vec[w] = v
@@ -175,6 +179,9 @@ func (e *Embedder) Fit(texts []string) {
 			n += v * v
 		}
 		n = math.Sqrt(n)
+		if n == 0 {
+			return // no direction to remove; dividing would make every embedding NaN
+		}
 		for i := range nu {
 			nu[i] /= n
 		}
@@ -211,6 +218,15 @@ func (e *Embedder) Embed(text string) []float32 {
 	return v
 }
 
+func isZero(v []float32) bool {
+	for _, x := range v {
+		if x != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func dot(a, b []float32) float64 {
 	var s float32
 	for i := range a {
@@ -245,11 +261,22 @@ func NewDense(e *Embedder, docs []Doc, cache map[string][]float32) *Dense {
 
 func (d *Dense) Name() string { return "dense" }
 
+// Rank returns documents by cosine similarity to q. A query with no known
+// word, and documents with no known word, have zero vectors and carry no
+// information: they are left out, as BM25 leaves out documents with no
+// shared term. (They used to come back with score 0 in ID order, which in
+// the dense hybrid added fused votes for alphabetically early tools.)
 func (d *Dense) Rank(q string, k int) []Hit {
 	qv := d.e.Embed(q)
-	hs := make([]Hit, len(d.ids))
+	if isZero(qv) {
+		return nil
+	}
+	hs := make([]Hit, 0, len(d.ids))
 	for i, v := range d.vecs {
-		hs[i] = Hit{d.ids[i], dot(qv, v)}
+		if isZero(v) {
+			continue
+		}
+		hs = append(hs, Hit{d.ids[i], dot(qv, v)})
 	}
 	sort.Slice(hs, func(i, j int) bool {
 		if hs[i].Score != hs[j].Score {
