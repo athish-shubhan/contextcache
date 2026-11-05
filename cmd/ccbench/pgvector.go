@@ -23,7 +23,9 @@ func pgvectorBench(args []string) error {
 	glove := fs.String("glove", "", "GloVe vectors (.gz)")
 	dsn := fs.String("dsn", "postgres://postgres:postgres@127.0.0.1:5432/contextcache?sslmode=disable", "Postgres with pgvector")
 	out := fs.String("out", "results/pgvector.json", "output")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 	c, err := catalog.Load(*catPath)
 	if err != nil {
 		return err

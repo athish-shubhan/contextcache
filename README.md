@@ -66,6 +66,24 @@ cmd/        ccgw (gateway), toolfarm (upstream MCP server), ccbench (overload, p
 bench/      prepare.sh (fetch BFCL), run_all.sh, conformance.py (official SDK), plot.py
 ```
 
+## Quick start
+
+Needs Go 1.24+. Runs from a clean clone with the committed `data/catalog.json` (no BFCL download, no Postgres, no model):
+
+```
+git clone https://github.com/athish-shubhan/contextcache && cd contextcache
+go test ./...
+go build -o bin/toolfarm ./cmd/toolfarm && go build -o bin/ccgw ./cmd/ccgw
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"demo","version":"0"}}}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"search_tools","arguments":{"query":"current weather in a city","k":3}}}' \
+  | bin/ccgw -farms 2 -mode meta
+```
+
+The gateway starts two toolfarm upstreams serving the 1,520-tool catalog, answers `initialize`, and returns the top 3 tools for the query. For Streamable HTTP with two tenants: `bin/ccgw -farms 2 -http 127.0.0.1:8090 -tenants 'tokA=acme:farm0;tokB=beta:farm1'`. Each upstream `tools/call` is limited by `-call-timeout` (default 60s; a hung upstream becomes a tool error instead of blocking the caller).
+
+CI (`.github/workflows/ci.yml`) runs gofmt, `go vet`, `go test -race`, the stdio smoke test above and golangci-lint on every pull request.
+
 ## Reproduce
 
 ```

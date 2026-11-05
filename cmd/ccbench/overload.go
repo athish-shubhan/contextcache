@@ -20,7 +20,9 @@ func prepare(args []string) error {
 	fs := flag.NewFlagSet("prepare", flag.ExitOnError)
 	dir := fs.String("bfcl", "data/bfcl", "BFCL data directory (bench/prepare.sh)")
 	out := fs.String("out", "data/catalog.json", "catalog output")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 	c, err := catalog.LoadBFCL(*dir, []string{"simple", "multiple", "live_simple", "live_multiple", "irrelevance", "live_irrelevance"})
 	if err != nil {
 		// newer BFCL releases name the Python categories simple_python etc.
@@ -67,7 +69,9 @@ func overload(args []string) error {
 	maxQ := fs.Int("queries", 0, "queries to use (0 = all)")
 	seed := fs.Uint64("seed", 1, "seed")
 	glove := fs.String("glove", "", "GloVe vectors (.gz) for the dense and three-way hybrid rankers")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 	c, err := catalog.Load(*catPath)
 	if err != nil {
 		return err

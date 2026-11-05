@@ -54,7 +54,7 @@ func ServeStdio(ctx context.Context, r io.Reader, w io.Writer, h Handler, sessio
 	enc := json.NewEncoder(w) // Encode writes one line per message
 	write := func(m any) {
 		wmu.Lock()
-		enc.Encode(m)
+		_ = enc.Encode(m) // a broken stdout ends the session when the reader sees EOF
 		wmu.Unlock()
 	}
 	s := &Session{ID: sessionID}
@@ -111,11 +111,22 @@ func HTTPHandler(h Handler, auth func(token string) (string, bool)) http.Handler
 		switch r.Method {
 		case http.MethodDelete:
 			mu.Lock()
-			if s := sessions[r.Header.Get("Mcp-Session-Id")]; s != nil {
+			s := sessions[r.Header.Get("Mcp-Session-Id")]
+			if s != nil && s.Tenant != tenant {
+				// one tenant must not be able to end another tenant's session
+				mu.Unlock()
+				http.Error(w, "session belongs to another tenant", http.StatusForbidden)
+				return
+			}
+			if s != nil {
 				delete(sessions, s.ID)
-				h.Closed(s)
 			}
 			mu.Unlock()
+			if s == nil {
+				http.Error(w, "unknown or missing Mcp-Session-Id", http.StatusNotFound)
+				return
+			}
+			h.Closed(s)
 			w.WriteHeader(http.StatusOK)
 			return
 		case http.MethodGet:
@@ -133,15 +144,22 @@ func HTTPHandler(h Handler, auth func(token string) (string, bool)) http.Handler
 			return
 		}
 		sid := r.Header.Get("Mcp-Session-Id")
-		mu.Lock()
-		s := sessions[sid]
+		var s *Session
 		if m.Method == "initialize" {
 			b := make([]byte, 16)
-			rand.Read(b)
+			if _, err := rand.Read(b); err != nil {
+				http.Error(w, "session id: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
 			s = &Session{ID: hex.EncodeToString(b), Tenant: tenant, Notify: func(string, any) {}}
+			mu.Lock()
 			sessions[s.ID] = s
+			mu.Unlock()
+		} else {
+			mu.Lock()
+			s = sessions[sid]
+			mu.Unlock()
 		}
-		mu.Unlock()
 		if s == nil {
 			http.Error(w, "unknown or missing Mcp-Session-Id", http.StatusNotFound)
 			return
@@ -163,5 +181,5 @@ func HTTPHandler(h Handler, auth func(token string) (string, bool)) http.Handler
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v)
 }

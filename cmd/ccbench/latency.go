@@ -72,7 +72,9 @@ func latency(args []string) error {
 	out := fs.String("out", "results/latency.json", "output")
 	n := fs.Int("calls", 4000, "calls per measurement")
 	farms := fs.Int("farms", 10, "upstream servers behind the gateway")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 	c, err := catalog.Load(*catPath)
 	if err != nil {
 		return err
@@ -126,7 +128,9 @@ func latency(args []string) error {
 			f    func(int) error
 			tool int
 		}{{"direct to one MCP server", callDirect, len(dts)}, {"through gateway (all mode)", callGw, nAll}} {
-			timeCalls(nil, 200, conc, p.f) // warm up
+			if _, err := timeCalls(nil, 200, conc, p.f); err != nil { // warm up
+				return err
+			}
 			lat, err := timeCalls(nil, *n, conc, p.f)
 			if err != nil {
 				return err

@@ -26,7 +26,6 @@ type Cache interface {
 type entry struct {
 	id   string
 	cost int
-	freq int
 }
 
 type LRU struct {

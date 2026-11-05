@@ -65,7 +65,6 @@ func (b *BiTemporal) Apply(e Event) error {
 		r.superseded = e.Recorded
 		if r.validFrom.Before(cut) { // keep the part before the change as a new version
 			rs = append(rs, row{value: r.value, validFrom: r.validFrom, validTo: cut, recorded: e.Recorded})
-			r = &rs[i]
 		}
 	}
 	if e.Op != OpDelete {

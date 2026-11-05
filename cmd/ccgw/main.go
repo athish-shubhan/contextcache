@@ -15,6 +15,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"contextcache/gateway"
 	"contextcache/mcp"
@@ -32,6 +33,7 @@ func main() {
 	httpAddr := flag.String("http", "", "serve Streamable HTTP here instead of stdio")
 	tenants := flag.String("tenants", "", "token=tenant:up1,up2;token2=... (HTTP only)")
 	trace := flag.String("trace", "", "write one JSON line per tool call here")
+	callTimeout := flag.Duration("call-timeout", 60*time.Second, "limit on each upstream tools/call (0 = none)")
 	flag.Parse()
 	log.SetOutput(os.Stderr)
 	ctx := context.Background()
@@ -72,33 +74,74 @@ func main() {
 		}(i, s)
 	}
 	wg.Wait()
-	cfg := gateway.Config{Mode: *mode, Budget: *budget, Count: tokens.Count}
+	if *mode != "all" && *mode != "meta" {
+		log.Fatalf("unknown -mode %q (want all or meta)", *mode)
+	}
+	cfg := gateway.Config{Mode: *mode, Budget: *budget, Count: tokens.Count, CallTimeout: *callTimeout}
 	if *trace != "" {
 		f, err := os.Create(*trace)
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		cfg.Trace = f
 	}
 	var auth func(string) (string, bool)
 	if *tenants != "" {
-		cfg.Tenants = map[string][]string{}
-		toks := map[string]string{}
-		for _, t := range strings.Split(*tenants, ";") {
-			tok, rest, _ := strings.Cut(t, "=")
-			ten, us, _ := strings.Cut(rest, ":")
-			toks[tok] = ten
-			cfg.Tenants[ten] = strings.Split(us, ",")
+		toks, allowed, err := parseTenants(*tenants)
+		if err != nil {
+			log.Fatal(err)
 		}
+		cfg.Tenants = allowed
 		auth = func(tok string) (string, bool) { t, ok := toks[tok]; return t, ok }
 	}
 	g := gateway.New(cfg, ups)
 	log.Printf("gateway: %d upstreams, %d tools, mode %s", len(ups), g.ToolCount(), *mode)
 	if *httpAddr != "" {
-		log.Fatal(http.ListenAndServe(*httpAddr, mcp.HTTPHandler(g, auth)))
+		srv := &http.Server{Addr: *httpAddr, Handler: mcp.HTTPHandler(g, auth),
+			ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
+		log.Fatal(srv.ListenAndServe())
 	}
 	if err := mcp.ServeStdio(ctx, os.Stdin, os.Stdout, g, "stdio"); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// parseTenants reads "token=tenant:up1,up2;token2=tenant2:up3". It returns
+// token -> tenant and tenant -> allowed upstreams. Empty entries (a trailing
+// ";") are skipped; an entry without a token, a tenant or an upstream is an
+// error, so a typo cannot authorise requests that carry no token at all.
+func parseTenants(spec string) (map[string]string, map[string][]string, error) {
+	toks := map[string]string{}
+	allowed := map[string][]string{}
+	for i, t := range strings.Split(spec, ";") {
+		if t = strings.TrimSpace(t); t == "" {
+			continue
+		}
+		tok, rest, ok1 := strings.Cut(t, "=")
+		ten, us, ok2 := strings.Cut(rest, ":")
+		tok, ten = strings.TrimSpace(tok), strings.TrimSpace(ten)
+		if !ok1 || !ok2 || tok == "" || ten == "" {
+			// the entry may hold a token, so report its position, not its text
+			return nil, nil, fmt.Errorf("-tenants: entry %d is malformed (want token=tenant:up1,up2)", i+1)
+		}
+		if _, dup := toks[tok]; dup {
+			return nil, nil, fmt.Errorf("-tenants: token for %q given twice", ten)
+		}
+		var ups []string
+		for _, u := range strings.Split(us, ",") {
+			if u = strings.TrimSpace(u); u != "" {
+				ups = append(ups, u)
+			}
+		}
+		if len(ups) == 0 {
+			return nil, nil, fmt.Errorf("-tenants: tenant %q has no upstreams", ten)
+		}
+		toks[tok] = ten
+		allowed[ten] = append(allowed[ten], ups...)
+	}
+	if len(toks) == 0 {
+		return nil, nil, fmt.Errorf("-tenants: no entries in %q", spec)
+	}
+	return toks, allowed, nil
 }
