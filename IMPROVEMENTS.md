@@ -243,3 +243,55 @@ figures could shift by the same small amount.
 
 `retrieve/dense.go`, `retrieve/dense_test.go` (new), `admit/admit_test.go`, `results/overload.json`,
 `results/SUMMARY.md`, `IMPROVEMENTS.md`.
+
+## Round 4 (2026-11-05): pgvector benchmark reproduced; both Postgres stores tested in CI
+
+Stacked on round 3 (`improve/round-3`).
+
+### What changed
+
+1. **pgvector benchmark reproduced.** With pgvector 0.6.0 (the README's version, `postgresql-16-pgvector` from
+   Ubuntu's archive) on Postgres 16, the README's pgvector paragraph holds:
+
+   | | committed `results/pgvector.json` | round 2 code | round 3 code | this round |
+   |---|---|---|---|---|
+   | HNSW top-10 overlap with exact search | 99.18% | 99.17% | 99.18% | 99.17% |
+   | recall@5, pgvector / exact | 65.04% / 65.25% | 65.10% / 65.25% | 65.10% / 65.25% | 65.10% / 65.25% |
+   | query p50 / p99 | 0.61 / 1.80 ms | 0.67 / 1.16 ms | 0.72 / 1.21 ms | 0.64 / 1.41 ms |
+   | in-memory exact p50 | 0.49 ms | 0.39 ms | 0.45 ms | |
+
+   Exact recall is identical; pgvector recall differs by 0.06 points because HNSW construction is not
+   deterministic; latencies are this VM's. `results/pgvector.json` is left as committed.
+2. **`PGVector` hardened.** The table name is formatted into SQL; it must now be a plain identifier (a name like
+   `tools; DROP TABLE x` is refused). `Insert` checks each vector's dimension, skips zero vectors (cosine distance to
+   them is undefined; round 3 made the in-memory ranker skip them, so both now rank the same set) and returns how
+   many it stored; `Search` returns nothing for a zero query; `Statement.Close` errors are checked. In this catalog
+   all 1,520 tool vectors are non-zero, so the benchmark above is unaffected (`vectors_stored: 1520`).
+3. **Both Postgres code paths are now tested, and CI runs them.** `retrieve/pgvector_test.go` (insert, index,
+   cosine ranking, zero query, wrong dimension, unsafe table names) and `memory/pg_test.go`, which replays a
+   generated MemRevise dataset (3 users, 1,200 events, 180 queries) into the Postgres bi-temporal store and the
+   in-memory one and requires both to give the reference answer to every query. They run when
+   `CONTEXTCACHE_TEST_DSN` is set; CI now starts a `pgvector/pgvector:pg16` service and sets it.
+
+### How it was verified
+
+```
+$ go build -o /tmp/ccbench ./cmd/ccbench
+$ /tmp/ccbench pgvector -catalog data/catalog.json -glove glove-wiki-gigaword-100.gz -dsn postgres://...:55432/contextcache
+pgvector: overlap 0.992, R@5 0.651 (exact 0.653), p50 0.64 ms
+$ go test -count=1 -v ./... | grep -E '^--- ' | awk '{print $2}' | sort | uniq -c                          # round 3 -> this round
+     38 PASS: -> 39 PASS:, 2 SKIP:
+$ CONTEXTCACHE_TEST_DSN=postgres://...:55432/contextcache go test -count=1 -v ./... | grep -E '^--- ' | ...  # with Postgres 16 + pgvector 0.6.0
+     41 PASS:
+$ go test -race -count=1 ./... ; golangci-lint run ./...    # all ok; 0 issues
+```
+
+### Not verified
+
+The skills, cache, latency and conformance benchmarks were not re-run (the conformance check needs the MCP Python
+SDK; the others were not touched by any round).
+
+### Files touched
+
+`retrieve/pgvector.go`, `retrieve/pgvector_test.go` (new), `memory/pg_test.go` (new), `cmd/ccbench/pgvector.go`,
+`.github/workflows/ci.yml`, `IMPROVEMENTS.md`.

@@ -53,7 +53,8 @@ func pgvectorBench(args []string) error {
 		docs = append(docs, retrieve.Doc{ID: t.ID, Text: t.RetrievalText()})
 	}
 	t0 := time.Now()
-	if err := p.Insert(ctx, ids, vecs); err != nil {
+	stored, err := p.Insert(ctx, ids, vecs)
+	if err != nil {
 		return err
 	}
 	loadSec := time.Since(t0).Seconds()
@@ -105,7 +106,7 @@ func pgvectorBench(args []string) error {
 		sort.Float64s(s)
 		return s[int(p*float64(len(s)-1))]
 	}
-	res := map[string]any{"tools": len(ids), "queries": n, "dim": emb.Dim, "load_sec": loadSec, "hnsw_build_sec": indexSec,
+	res := map[string]any{"tools": len(ids), "vectors_stored": stored, "queries": n, "dim": emb.Dim, "load_sec": loadSec, "hnsw_build_sec": indexSec,
 		"ann_top10_overlap_with_exact": overlap / (10 * n), "recall5_pgvector": hitPG / n, "recall5_exact": hitMem / n,
 		"pgvector_ms":        map[string]float64{"p50": q(latPG, 0.5), "p99": q(latPG, 0.99)},
 		"in_memory_exact_ms": map[string]float64{"p50": q(latMem, 0.5), "p99": q(latMem, 0.99)}}
