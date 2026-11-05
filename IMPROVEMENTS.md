@@ -250,8 +250,7 @@ Stacked on round 3 (`improve/round-3`).
 
 ### What changed
 
-1. **pgvector benchmark reproduced.** With pgvector 0.6.0 (the README's version, `postgresql-16-pgvector` from
-   Ubuntu's archive) on Postgres 16, the README's pgvector paragraph holds:
+1. **pgvector benchmark reproduced.** With pgvector 0.6.0 (the README's version, apt package `postgresql-16-pgvector`) on Postgres 16, the README's pgvector paragraph holds:
 
    | | committed `results/pgvector.json` | round 2 code | round 3 code | this round |
    |---|---|---|---|---|
@@ -289,7 +288,7 @@ $ go test -race -count=1 ./... ; golangci-lint run ./...    # all ok; 0 issues
 ### Not verified
 
 The skills, cache, latency and conformance benchmarks were not re-run (the conformance check needs the MCP Python
-SDK; the others were not touched by any round).
+SDK; the others only had error-handling changes in round 1).
 
 ### Files touched
 
