@@ -258,7 +258,7 @@ Stacked on round 3 (`improve/round-3`).
    | HNSW top-10 overlap with exact search | 99.18% | 99.17% | 99.18% | 99.17% |
    | recall@5, pgvector / exact | 65.04% / 65.25% | 65.10% / 65.25% | 65.10% / 65.25% | 65.10% / 65.25% |
    | query p50 / p99 | 0.61 / 1.80 ms | 0.67 / 1.16 ms | 0.72 / 1.21 ms | 0.64 / 1.41 ms |
-   | in-memory exact p50 | 0.49 ms | 0.39 ms | 0.45 ms | |
+   | in-memory exact p50 | 0.49 ms | 0.39 ms | 0.45 ms | 0.40 ms |
 
    Exact recall is identical; pgvector recall differs by 0.06 points because HNSW construction is not
    deterministic; latencies are this VM's. `results/pgvector.json` is left as committed.
