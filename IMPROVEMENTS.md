@@ -168,3 +168,78 @@ re-run (GloVe download, pgvector and the MCP Python SDK needed).
 
 `retrieve/retrieve_test.go`, `catalog/catalog.go`, `catalog/catalog_test.go` (new), `mcp/server.go`, `mcp/mcp_test.go`,
 `IMPROVEMENTS.md`.
+
+## Round 3 (2026-11-05): dense columns reproduced; dense retriever edge cases fixed; cache invariants
+
+Stacked on round 2 (`improve/round-2`).
+
+### What changed
+
+1. **The dense (GloVe) columns of the overload benchmark now reproduce.** Rounds 1 and 2 could not re-run them.
+   With `glove-wiki-gigaword-100` (the file `bench/run_all.sh` downloads, 134 MB), round 2's code reproduces the
+   committed `results/overload.json` **exactly**: all 35 rows (7 catalog sizes x 5 rankers), every recall@k, MRR
+   and token field.
+2. **Bug: the dense ranker padded its results with uninformative hits.** When no query word is in the GloVe
+   vocabulary the query vector is zero, and `Dense.Rank` returned every document with score 0, in ID order; it
+   also returned documents with no known word (zero vectors) at score 0, ranked above negatively correlated ones.
+   In the dense hybrid those became fused votes for alphabetically early tools. Both are now left out, as BM25
+   leaves out documents that share no term. With 10 tools this was visible: dense recall@10 was 100% only because
+   all 10 tools were always returned; 12 of the 1,911 queries (0.6%) have no word GloVe knows.
+3. **Bug: `Fit` could make every embedding NaN.** Power iteration divided by the norm of the update; when it was 0
+   (data orthogonal to the start vector) the principal component, and with it every embedding, became NaN. It now
+   stops instead. `LoadGloVe` reported nothing for a malformed number and loaded 0; it now fails with the line.
+4. **Tests**: `retrieve/dense_test.go` (gzipped and plain GloVe with a header, vocabulary filtering keeping file
+   ranks, malformed number, empty file, ranking, unknown-word queries, zero-vector documents, unit norm with the
+   fitted direction removed, embedding cache, the degenerate `Fit`, the dense hybrid); `admit`: invariants for
+   LRU, LFU and W-TinyLFU on random streams (usage equals the sum of held costs and stays within budget, no
+   duplicates, `Contains` agrees with `Items`, `Access` reports whether the item was held, an item larger than the
+   budget is never held). No admission bug was found.
+
+### Re-measured results (item 2 changes them)
+
+```
+$ go build -o /tmp/ccbench ./cmd/ccbench
+$ /tmp/ccbench overload -catalog data/catalog.json -glove glove-wiki-gigaword-100.gz -out /tmp/overload.json
+```
+
+Round 2's code vs the committed file: 0 of 35 rows differ. This round vs the committed file: the dense and
+hybrid+dense rows change, BM25 / trigram / hybrid rows are identical. `results/overload.json` is replaced by this
+run and the 14 affected rows of `results/SUMMARY.md` were rewritten with `plot.py`'s format (matplotlib is not
+installed here, so `results/overload.png` was not regenerated; it plots recall@5, which moves by at most 0.3
+points at 10 and 50 tools). Old -> new, recall@1 / @5 / @10:
+
+| N | ranker | old | new |
+|---|---|---|---|
+| 10 | dense | 90.6 / 98.6 / 100.0% | 90.4 / 98.3 / 99.4% |
+| 10 | hybrid+dense | 94.8 / 99.0 / 100.0% | 94.7 / 98.6 / 99.4% |
+| 50 | dense | 79.3 / 94.0 / 96.4% | 79.2 / 93.9 / 96.3% |
+| 50 | hybrid+dense | 88.9 / 96.7 / 97.4% | 88.9 / 96.6 / 97.3% |
+| 100 | dense | 72.5 / 91.3 / 94.2% | 72.5 / 91.3 / 94.1% |
+| 100 | hybrid+dense | 84.7 / 95.7 / 96.8% | 84.7 / 95.7 / 96.7% |
+| 200 | dense, hybrid+dense | recall@10 91.7%, 95.9% | 91.6%, 95.8% |
+| 500 to 1,520 | dense, hybrid+dense | | recall unchanged; top-5 and search-result tokens 3 to 4 lower |
+
+**No number in the README changes** (its dense numbers are recall@5 at 100 / 500 / 1,520 and the 1,520-tool
+comparisons, all unchanged; its token column is the hybrid ranker's).
+
+### How it was verified
+
+```
+$ go test -count=1 -v ./... | grep -E '^--- ' | awk '{print $2}' | sort | uniq -c    # round 2 -> this round
+     33 PASS: -> 38 PASS:
+$ go test -race -count=1 ./... ; golangci-lint run ./...    # all ok; 0 issues
+```
+
+Coverage: `retrieve` 39.0% -> 81.7%, `admit` 78.8% -> 90.5%. On round 2's `dense.go` the new tests fail:
+`a malformed number must be an error naming the line: <nil>`,
+`hits [{weather.forecast 0.21} {empty 0} {finance.convert -0.21}]`, `Fit produced NaN embeddings`.
+
+### Not verified
+
+The pgvector benchmark uses `NewDense` as its exact reference and was not re-run (no pgvector here); its overlap
+figures could shift by the same small amount.
+
+### Files touched
+
+`retrieve/dense.go`, `retrieve/dense_test.go` (new), `admit/admit_test.go`, `results/overload.json`,
+`results/SUMMARY.md`, `IMPROVEMENTS.md`.
