@@ -40,7 +40,9 @@ func main() {
 	glove := flag.String("glove", "", "GloVe vectors (.gz): add dense similarity baselines")
 	flag.Parse()
 	ds := memory.Generate(*seed, *users, *evs, *qs)
-	os.MkdirAll(*data, 0o755)
+	if err := os.MkdirAll(*data, 0o755); err != nil {
+		log.Fatal(err)
+	}
 	writeLines(filepath.Join(*data, "events.jsonl"), ds.Events)
 	writeLines(filepath.Join(*data, "queries.jsonl"), ds.Queries)
 
@@ -116,9 +118,14 @@ func writeLines[T any](path string, xs []T) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer f.Close()
 	enc := json.NewEncoder(f)
 	for _, x := range xs {
-		enc.Encode(x)
+		if err := enc.Encode(x); err != nil {
+			log.Fatalf("%s: %v", path, err)
+		}
+	}
+	// a failed close can mean the data never reached the disk
+	if err := f.Close(); err != nil {
+		log.Fatalf("%s: %v", path, err)
 	}
 }

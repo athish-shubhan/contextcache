@@ -49,7 +49,7 @@ func (p *PGVector) Insert(ctx context.Context, ids []string, vecs [][]float32) e
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // no-op after Commit
 	st, err := tx.PrepareContext(ctx, fmt.Sprintf(`INSERT INTO %s (id, emb) VALUES ($1, $2::vector)`, p.Table))
 	if err != nil {
 		return err

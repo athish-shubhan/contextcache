@@ -55,7 +55,7 @@ func (p *PGBiTemporal) Apply(e Event) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // no-op after Commit
 	cut := e.ValidFrom
 	if e.Op == OpDelete {
 		cut = e.Recorded

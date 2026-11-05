@@ -37,6 +37,10 @@ type Config struct {
 	Trace    io.Writer           // JSON lines, one per tool call (nil = off)
 	Count    func(string) int    // token counter
 	PageSize int
+	// CallTimeout bounds each upstream tools/call; 0 means no limit beyond
+	// the caller's context. Over stdio that context never ends, so without
+	// a limit one hung upstream tool blocks its caller forever.
+	CallTimeout time.Duration
 }
 
 type entry struct {
@@ -149,7 +153,7 @@ func (g *Gateway) Handle(ctx context.Context, s *mcp.Session, method string, par
 	switch method {
 	case "initialize":
 		var p mcp.InitializeParams
-		json.Unmarshal(params, &p)
+		_ = json.Unmarshal(params, &p) // a missing version negotiates the newest
 		g.sess(s)
 		return mcp.InitializeResult{ProtocolVersion: mcp.Negotiate(p.ProtocolVersion),
 			Capabilities: map[string]any{"tools": map[string]any{"listChanged": true}},
@@ -159,7 +163,11 @@ func (g *Gateway) Handle(ctx context.Context, s *mcp.Session, method string, par
 		return struct{}{}, nil
 	case "tools/list":
 		var p mcp.ListToolsParams
-		json.Unmarshal(params, &p)
+		if len(params) > 0 {
+			if err := json.Unmarshal(params, &p); err != nil {
+				return nil, bad(err.Error())
+			}
+		}
 		return g.list(s, p.Cursor)
 	case "tools/call":
 		var p mcp.CallToolParams
@@ -263,7 +271,9 @@ func (g *Gateway) call(ctx context.Context, s *mcp.Session, p mcp.CallToolParams
 			var a struct {
 				Name string `json:"name"`
 			}
-			json.Unmarshal(p.Arguments, &a)
+			if json.Unmarshal(p.Arguments, &a) != nil || a.Name == "" {
+				return nil, bad("load_tool needs a name")
+			}
 			e := g.entries[a.Name]
 			if !g.allowed(s.Tenant, e) {
 				return mcp.TextResult("unknown tool "+a.Name, true), nil
@@ -317,6 +327,11 @@ func (g *Gateway) proxy(ctx context.Context, s *mcp.Session, name string, args j
 	if len(args) == 0 {
 		args = json.RawMessage(`{}`)
 	}
+	if g.cfg.CallTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, g.cfg.CallTimeout)
+		defer cancel()
+	}
 	t := time.Now()
 	res, err := e.up.Client.CallTool(ctx, e.orig, args)
 	dur := time.Since(t)
@@ -340,7 +355,7 @@ func (g *Gateway) trace(s *mcp.Session, tool, up string, d time.Duration, ok boo
 	b, _ := json.Marshal(map[string]any{"ts": time.Now().UTC().Format(time.RFC3339Nano), "session": s.ID, "tenant": s.Tenant,
 		"tool": tool, "upstream": up, "upstream_us": d.Microseconds(), "ok": ok})
 	g.tmu.Lock()
-	g.cfg.Trace.Write(append(b, '\n'))
+	_, _ = g.cfg.Trace.Write(append(b, '\n')) // tracing must not fail a call
 	g.tmu.Unlock()
 }
 

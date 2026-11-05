@@ -148,10 +148,13 @@ func (c *Client) Initialize(ctx context.Context, name string) error {
 	return c.Notify("notifications/initialized", nil)
 }
 
-// ListTools follows nextCursor until the server has listed everything.
+// ListTools follows nextCursor until the server has listed everything. A
+// server that hands out a cursor it already returned is an error rather
+// than an endless loop.
 func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 	var all []Tool
 	cursor := ""
+	seen := map[string]bool{}
 	for {
 		var r ListToolsResult
 		if err := c.Call(ctx, "tools/list", ListToolsParams{Cursor: cursor}, &r); err != nil {
@@ -161,6 +164,10 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 		if r.NextCursor == "" {
 			return all, nil
 		}
+		if seen[r.NextCursor] {
+			return nil, fmt.Errorf("mcp: tools/list returned cursor %q twice", r.NextCursor)
+		}
+		seen[r.NextCursor] = true
 		cursor = r.NextCursor
 	}
 }
@@ -172,7 +179,7 @@ func (c *Client) CallTool(ctx context.Context, name string, args json.RawMessage
 }
 
 func (c *Client) Close() error {
-	c.w.Close()
+	_ = c.w.Close()
 	if c.cmd != nil {
 		return c.cmd.Wait()
 	}

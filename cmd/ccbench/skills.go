@@ -35,7 +35,9 @@ func skills(args []string) error {
 	catPath := fs.String("catalog", "data/catalog.json", "catalog")
 	out := fs.String("out", "results/skills.json", "output")
 	seed := fs.Uint64("seed", 3, "seed")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 	c, err := catalog.Load(*catPath)
 	if err != nil {
 		return err

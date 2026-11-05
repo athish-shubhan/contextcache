@@ -224,12 +224,13 @@ func Generate(seed uint64, users, eventsPerUser, queriesPerUser int) Dataset {
 				at = start.Add(time.Duration(r.Int64N(int64(now.Sub(start))))).Truncate(24 * time.Hour).Add(12 * time.Hour)
 			}
 			ans := ref.AsOf(a, at, at)
-			if k == QCurrent {
+			switch k {
+			case QCurrent:
 				ans = ref.AsOf(a, now, now)
 				if ans == None && ref.EverSet(a, now) {
 					k = QDeleted
 				}
-			} else if k == QAsOf {
+			case QAsOf:
 				ans = ref.AsOf(a, at, now)
 			}
 			qq := Query{ID: u*1000 + qid, User: user, Kind: k, Attr: a, At: at, Answer: ans}

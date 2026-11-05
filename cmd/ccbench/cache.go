@@ -34,7 +34,9 @@ func cacheBench(args []string) error {
 	zipf := fs.Float64("zipf", 1.0, "tool popularity skew")
 	shift := fs.Int("shift-every", 5000, "turns between popularity shifts")
 	seed := fs.Uint64("seed", 1, "seed")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 	c, err := catalog.Load(*catPath)
 	if err != nil {
 		return err
