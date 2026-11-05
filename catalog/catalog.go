@@ -114,18 +114,19 @@ func fixSchema(raw json.RawMessage) json.RawMessage {
 		switch t := x.(type) {
 		case map[string]any:
 			for k, vv := range t {
-				if k == "type" {
-					if s, ok := vv.(string); ok {
-						switch s {
-						case "dict":
-							t[k] = "object"
-						case "float":
-							t[k] = "number"
-						case "tuple", "list":
-							t[k] = "array"
-						case "any":
-							delete(t, k)
-						}
+				// Only a string-valued "type" is a type. Under "properties" a
+				// parameter can itself be named "type"; its value is a schema
+				// and must be walked like any other (it used to be skipped).
+				if s, ok := vv.(string); ok && k == "type" {
+					switch s {
+					case "dict":
+						t[k] = "object"
+					case "float":
+						t[k] = "number"
+					case "tuple", "list":
+						t[k] = "array"
+					case "any":
+						delete(t, k)
 					}
 					continue
 				}

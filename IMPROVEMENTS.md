@@ -104,3 +104,67 @@ All six stores match `results/memrevise.json` exactly, per query kind; event and
 `cmd/ccgw/main.go`, `cmd/ccgw/main_test.go` (new), `cmd/toolfarm/main.go`, `cmd/memrevise/main.go`,
 `cmd/ccbench/{cache,latency,overload,pgvector,skills}.go`, `memory/{memrevise,stores,pg}.go`, `retrieve/pgvector.go`,
 `admit/admit.go`, `.github/workflows/ci.yml` (new), `.golangci.yml` (new), `README.md`, `IMPROVEMENTS.md` (new).
+
+## Round 2 (2026-11-05): overload benchmark reproduced, ranker and catalog tests, bounded HTTP sessions
+
+Stacked on round 1 (`improve/round-1`).
+
+### What changed
+
+1. **Tests for the rankers behind the headline recall numbers** (`retrieve/`): BM25 scores checked against a hand
+   calculation (k1 = 1.2, b = 0.75, the exact idf formula), including length normalisation and duplicate query
+   terms; trigram cosine is 1 for an identical document and in (0, 1] otherwise; reciprocal-rank fusion scores
+   are exactly `sum 1/(K + rank)`, ties ordered by ID, `Depth` and `k` respected; tokenizer edge cases; empty
+   indexes.
+2. **Tests for `catalog/`** (0% before): schema fix-ups, BFCL loading on a synthetic data directory (newest file
+   version only, `simple` does not pick up `live_simple`, one tool per name, answers mapped, irrelevance queries
+   kept with no tool, missing category is an error), Save/Load round trip, and a check that the committed
+   `data/catalog.json` has unique tool ids, every needle query points at a tool, and the counts match the README
+   (1,520 tools, 1,911 needle queries).
+3. **Bug: `fixSchema` skipped parameters named `type`.** It treated every key `"type"` as a type and did not walk
+   into it, so inside `properties` a parameter called `type` kept BFCL's `dict` / `float` / `tuple` / `list`
+   types. Only a string-valued `"type"` is treated as a type now. The committed catalog has no affected tool
+   (checked: 0 unconverted types), so no result changes.
+4. **Bounded HTTP sessions.** Clients need not `DELETE` their session, so every `initialize` stayed in memory for
+   the life of the gateway. `mcp.NewHTTPHandler` takes `HTTPOptions{IdleTimeout, MaxSessions}`; `HTTPHandler`
+   (used by `ccgw`) defaults to 30 idle minutes and 10,000 sessions. Expired sessions are reported to the
+   handler's `Closed`; an `initialize` over the cap gets 503. Tested with a fake clock.
+
+### How it was verified
+
+Overload benchmark (README "Tool overload" table) re-run from the committed catalog, no download needed for the
+lexical rankers:
+
+```
+$ go build -o /tmp/ccbench ./cmd/ccbench
+$ time /tmp/ccbench overload -catalog data/catalog.json -out /tmp/overload.json
+real	12m26.722s
+N=1520 bm25     R@1 0.567 R@5 0.797 MRR 0.670 tokens all 187421 top5 675
+N=1520 trigram  R@1 0.520 R@5 0.779 MRR 0.634 tokens all 187421 top5 634
+N=1520 hybrid   R@1 0.571 R@5 0.807 MRR 0.678 tokens all 187421 top5 662
+```
+
+Compared with `results/overload.json`: 21 rows (7 catalog sizes x BM25, trigram, hybrid), 105 fields, **0
+differences**. Recall@5 at 100 / 500 / 1,520 tools: BM25 94.1 / 88.4 / 79.7%, trigram 94.2 / 87.1 / 77.9%,
+hybrid 95.2 / 89.8 / 80.7%, all as in the README; 187,421 tokens to list every tool, as in the README. This round
+changes no ranker code, so the result holds for this branch.
+
+```
+$ go test -count=1 -v ./... | grep -E '^--- ' | awk '{print $2}' | sort | uniq -c    # round 1 -> this round
+     23 PASS: -> 33 PASS:
+$ go test -race -count=1 ./...      # all ok
+$ golangci-lint run ./...           # 0 issues
+```
+
+Coverage: `catalog` 0% -> 92.1%, `mcp` 83.4% -> 85.3%, `retrieve` 37.0% -> 39.0% (the rest of `retrieve` is the
+GloVe and pgvector code). The new `TestFixSchema` on the old `fixSchema` leaves `type:map[... n:map[type:float]] type:dict]`.
+
+### Not verified
+
+The dense (GloVe) and hybrid+dense columns, pgvector, skills, cache, latency and conformance benchmarks were not
+re-run (GloVe download, pgvector and the MCP Python SDK needed).
+
+### Files touched
+
+`retrieve/retrieve_test.go`, `catalog/catalog.go`, `catalog/catalog_test.go` (new), `mcp/server.go`, `mcp/mcp_test.go`,
+`IMPROVEMENTS.md`.
