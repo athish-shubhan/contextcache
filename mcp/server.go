@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Session is one connected client. Notify sends a server-to-client
@@ -20,6 +21,8 @@ type Session struct {
 	Tenant string
 	Notify func(method string, params any)
 	State  any
+
+	lastUsed time.Time // HTTP only: for idle expiry
 }
 
 type Handler interface {
@@ -90,14 +93,60 @@ func ServeStdio(ctx context.Context, r io.Reader, w io.Writer, h Handler, sessio
 	return sc.Err()
 }
 
+// HTTPOptions bound the sessions an HTTP server keeps. Clients are not
+// obliged to DELETE their session, so without a bound every initialize
+// would stay in memory for the life of the process.
+type HTTPOptions struct {
+	IdleTimeout time.Duration // a session unused this long is closed (0 = never)
+	MaxSessions int           // initialize beyond this many live sessions gets 503 (0 = no limit)
+	now         func() time.Time
+}
+
+// DefaultHTTPOptions closes sessions after 30 idle minutes and keeps at most
+// 10,000.
+var DefaultHTTPOptions = HTTPOptions{IdleTimeout: 30 * time.Minute, MaxSessions: 10000}
+
 // HTTPHandler serves Streamable HTTP in JSON response mode: each POST
 // carries one JSON-RPC message and gets one JSON response. Sessions are
 // identified by the Mcp-Session-Id header issued at initialize. auth maps a
-// bearer token to a tenant; nil means no authentication.
+// bearer token to a tenant; nil means no authentication. Sessions are
+// bounded by DefaultHTTPOptions.
 func HTTPHandler(h Handler, auth func(token string) (string, bool)) http.Handler {
+	return NewHTTPHandler(h, auth, DefaultHTTPOptions)
+}
+
+// NewHTTPHandler is HTTPHandler with explicit session bounds.
+func NewHTTPHandler(h Handler, auth func(token string) (string, bool), o HTTPOptions) http.Handler {
+	if o.now == nil {
+		o.now = time.Now
+	}
 	var mu sync.Mutex
 	sessions := map[string]*Session{}
+	var lastSweep time.Time
+	// expire closes idle sessions; called with mu held, at most once per
+	// tenth of the idle timeout so a busy server does not scan on every call.
+	expire := func(now time.Time) []*Session {
+		if o.IdleTimeout <= 0 || now.Sub(lastSweep) < o.IdleTimeout/10 {
+			return nil
+		}
+		lastSweep = now
+		var gone []*Session
+		for id, s := range sessions {
+			if now.Sub(s.lastUsed) >= o.IdleTimeout {
+				delete(sessions, id)
+				gone = append(gone, s)
+			}
+		}
+		return gone
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		now := o.now()
+		mu.Lock()
+		gone := expire(now)
+		mu.Unlock()
+		for _, s := range gone {
+			h.Closed(s)
+		}
 		tenant := ""
 		if auth != nil {
 			tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -151,13 +200,23 @@ func HTTPHandler(h Handler, auth func(token string) (string, bool)) http.Handler
 				http.Error(w, "session id: "+err.Error(), http.StatusInternalServerError)
 				return
 			}
-			s = &Session{ID: hex.EncodeToString(b), Tenant: tenant, Notify: func(string, any) {}}
+			s = &Session{ID: hex.EncodeToString(b), Tenant: tenant, Notify: func(string, any) {}, lastUsed: now}
 			mu.Lock()
-			sessions[s.ID] = s
+			full := o.MaxSessions > 0 && len(sessions) >= o.MaxSessions
+			if !full {
+				sessions[s.ID] = s
+			}
 			mu.Unlock()
+			if full {
+				http.Error(w, "too many sessions", http.StatusServiceUnavailable)
+				return
+			}
 		} else {
 			mu.Lock()
 			s = sessions[sid]
+			if s != nil && s.Tenant == tenant {
+				s.lastUsed = now
+			}
 			mu.Unlock()
 		}
 		if s == nil {

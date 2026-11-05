@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -330,5 +331,48 @@ func TestHTTPWithoutAuth(t *testing.T) {
 	resp2, _ := c.do("POST", "", "", initBody)
 	if resp2.Header.Get("Mcp-Session-Id") == sid {
 		t.Fatal("two initializes got the same session id")
+	}
+}
+
+func TestHTTPSessionIdleExpiryAndCap(t *testing.T) {
+	var mu sync.Mutex
+	clock := time.Unix(1_000_000, 0)
+	advance := func(d time.Duration) { mu.Lock(); clock = clock.Add(d); mu.Unlock() }
+	f := &fake{closed: make(chan *Session, 8)}
+	srv := httptest.NewServer(NewHTTPHandler(f, nil, HTTPOptions{IdleTimeout: time.Minute, MaxSessions: 2,
+		now: func() time.Time { mu.Lock(); defer mu.Unlock(); return clock }}))
+	defer srv.Close()
+	c := httpClient{t, srv.URL}
+	sid := func() string {
+		resp, _ := c.do("POST", "", "", initBody)
+		return resp.Header.Get("Mcp-Session-Id")
+	}
+	a, b := sid(), sid()
+	if a == "" || b == "" {
+		t.Fatal("initialize failed")
+	}
+	if resp, _ := c.do("POST", "", "", initBody); resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("third session over MaxSessions 2: %d", resp.StatusCode)
+	}
+	// keep a alive, let b go idle
+	advance(40 * time.Second)
+	c.do("POST", "", a, `{"jsonrpc":"2.0","id":1,"method":"tenant"}`)
+	advance(30 * time.Second) // b idle 70 s, a idle 30 s
+	if resp, _ := c.do("POST", "", a, `{"jsonrpc":"2.0","id":2,"method":"tenant"}`); resp.StatusCode != 200 {
+		t.Fatalf("active session expired: %d", resp.StatusCode)
+	}
+	if resp, _ := c.do("POST", "", b, `{"jsonrpc":"2.0","id":3,"method":"tenant"}`); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("idle session still served: %d", resp.StatusCode)
+	}
+	select {
+	case s := <-f.closed:
+		if s.ID != b {
+			t.Fatalf("closed %s, want the idle %s", s.ID, b)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("handler not told the idle session closed")
+	}
+	if sid() == "" {
+		t.Fatal("expiry should have freed room for a new session")
 	}
 }
