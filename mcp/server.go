@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -95,6 +96,18 @@ func ServeStdio(ctx context.Context, r io.Reader, w io.Writer, h Handler, sessio
 // identified by the Mcp-Session-Id header issued at initialize. auth maps a
 // bearer token to a tenant; nil means no authentication.
 func HTTPHandler(h Handler, auth func(token string) (string, bool)) http.Handler {
+	return HTTPHandlerLimit(h, auth, MaxSessions)
+}
+
+// MaxSessions is the default cap on concurrent HTTP sessions.
+const MaxSessions = 10000
+
+// maxBody bounds a single JSON-RPC request over HTTP.
+const maxBody = 16 << 20
+
+// HTTPHandlerLimit is HTTPHandler with an explicit cap on live sessions;
+// initialize beyond the cap gets 503.
+func HTTPHandlerLimit(h Handler, auth func(token string) (string, bool), maxSessions int) http.Handler {
 	var mu sync.Mutex
 	sessions := map[string]*Session{}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -128,14 +141,24 @@ func HTTPHandler(h Handler, auth func(token string) (string, bool)) http.Handler
 			return
 		}
 		var m Message
-		if err := json.NewDecoder(io.LimitReader(r.Body, 16<<20)).Decode(&m); err != nil {
-			writeJSON(w, http.StatusBadRequest, Message{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &Error{ParseError, err.Error()}})
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody)).Decode(&m); err != nil {
+			code := http.StatusBadRequest
+			var mbe *http.MaxBytesError
+			if errors.As(err, &mbe) {
+				code = http.StatusRequestEntityTooLarge
+			}
+			writeJSON(w, code, Message{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &Error{ParseError, err.Error()}})
 			return
 		}
 		sid := r.Header.Get("Mcp-Session-Id")
 		mu.Lock()
 		s := sessions[sid]
 		if m.Method == "initialize" {
+			if len(sessions) >= maxSessions {
+				mu.Unlock()
+				http.Error(w, "too many sessions", http.StatusServiceUnavailable)
+				return
+			}
 			b := make([]byte, 16)
 			rand.Read(b)
 			s = &Session{ID: hex.EncodeToString(b), Tenant: tenant, Notify: func(string, any) {}}

@@ -5,7 +5,7 @@ Deciding which tools, Skills and memories enter an agent's context. Two parts:
 - an **MCP gateway in Go** (protocol written from the spec, no SDK) that aggregates many MCP servers and, instead of listing every tool, exposes `search_tools`, `load_tool` and `call_tool` plus a per-session set of loaded tools kept under a token budget by a W-TinyLFU admission cache, with per-tenant authorisation and per-call tracing;
 - **MemRevise**, a benchmark for agent memory under revisions, corrections and deletions, with a bi-temporal store (Postgres and in-memory) and six baselines.
 
-## Results (measured on one 2-vCPU VM; no model was called anywhere)
+## Results (measured once on one 2-vCPU VM, no repeated runs or confidence intervals; no model was called anywhere)
 
 Full tables: [`results/SUMMARY.md`](results/SUMMARY.md). Design: [`docs/DESIGN.md`](docs/DESIGN.md).
 
@@ -73,7 +73,7 @@ bench/prepare.sh        # once: sparse checkout of BFCL data, builds data/catalo
 pip install mcp         # for the conformance check
 bench/run_all.sh        # about 16 minutes; needs Postgres with pgvector (DSN in the script); fetches
                         # GloVe 100-d (glove-wiki-gigaword-100 release of RaRe-Technologies/gensim-data)
-go test ./...
+go test -race ./...
 ```
 
 The MemRevise dataset is regenerated deterministically (`data/memrevise/events.jsonl`, `queries.jsonl`, seed 2026).
@@ -84,15 +84,5 @@ The MemRevise dataset is regenerated deterministically (`data/memrevise/events.j
 - **A neural embedding model**: none could be downloaded. Dense retrieval uses static GloVe vectors with SIF weighting (a 2017 baseline), behind the same `Ranker` interface and pgvector store a modern encoder would use. "Dense lost to BM25" is a result about static word vectors only.
 - **CloudWeGo Eino**: the gateway is plain Go with its own MCP implementation; it is not built on Eino and nothing was contributed to Eino or eino-ext.
 - **Skills**: triggering is measured with tools playing skills (name + description as tier 1), not with a corpus of real SKILL.md files, and the trigger is a retrieval threshold, not a model's decision.
-- **Protocol**: the gateway speaks MCP up to 2025-11-25 and negotiates that version with SDK 2.3.0 (whose newest is 2026-07-28); Streamable HTTP is served in JSON-response mode only (no SSE stream, so list_changed is delivered over stdio only).
+- **Protocol**: the gateway speaks MCP up to 2025-11-25 and negotiates that version with SDK 2.3.0 (whose newest is 2026-07-28); the gateway has no authentication beyond static bearer tokens and keeps sessions in memory (capped at 10,000); Streamable HTTP is served in JSON-response mode only (no SSE stream, so list_changed is delivered over stdio only).
 - MemRevise stores receive structured events; extraction from free text and reading answers out of retrieved memories (where LLMs make mistakes) are deliberately outside the benchmark.
-
-## Resume bullets (numbers from `results/`)
-
-- Built ContextCache, a Go MCP gateway (protocol implemented from the spec) that aggregates MCP servers behind search, load and call meta-tools with a token-budgeted W-TinyLFU loaded-tool set, per-tenant auth and per-call tracing; passes 16/16 conformance checks against the official MCP Python SDK.
-- On the 1,520-tool BFCL catalog, hybrid BM25 + trigram retrieval put the right tool in the top 5 for 80.7% of queries (95.2% at 100 tools) while cutting tool tokens per turn by 99.8% (187k to about 430), at +0.22 ms p50 / +0.40 ms p99 gateway overhead per call; static-embedding dense retrieval served from pgvector HNSW (0.61 ms p50) scored lower than BM25 (65.3% vs 79.7%) and added under a point in fusion.
-- Designed MemRevise, a revision-aware agent-memory benchmark (current, deleted, as-of and as-recorded queries with exact ground truth), where a bi-temporal Postgres store scored 100% against 49.5% for latest-value memory and 18-22% for BM25 and dense similarity memory, at 2.7 ms p99 writes.
-
-## Interview defence
-
-See `docs/DESIGN.md` section 7 (why bi-temporal, keeping deleted facts deleted, why W-TinyLFU over LRU, how MemRevise differs from LoCoMo and LongMemEval). Be ready to say plainly that in the session benchmark retrieval did most of the work, that LFU beat W-TinyLFU as a cache on its own, and that the dense retriever lost to BM25 (and why that does not generalise to modern encoders).

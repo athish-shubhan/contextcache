@@ -110,6 +110,9 @@ func (c *Client) Call(ctx context.Context, method string, params, out any) error
 	c.pending[id] = ch
 	c.mu.Unlock()
 	if err := c.send(Message{JSONRPC: "2.0", ID: json.RawMessage(id), Method: method, Params: p}); err != nil {
+		c.mu.Lock()
+		delete(c.pending, id)
+		c.mu.Unlock()
 		return err
 	}
 	select {
@@ -152,6 +155,7 @@ func (c *Client) Initialize(ctx context.Context, name string) error {
 func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 	var all []Tool
 	cursor := ""
+	seen := map[string]bool{}
 	for {
 		var r ListToolsResult
 		if err := c.Call(ctx, "tools/list", ListToolsParams{Cursor: cursor}, &r); err != nil {
@@ -161,6 +165,10 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 		if r.NextCursor == "" {
 			return all, nil
 		}
+		if seen[r.NextCursor] {
+			return nil, fmt.Errorf("mcp: tools/list repeated cursor %q", r.NextCursor)
+		}
+		seen[r.NextCursor] = true
 		cursor = r.NextCursor
 	}
 }

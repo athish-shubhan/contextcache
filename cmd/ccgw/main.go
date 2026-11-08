@@ -15,6 +15,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"contextcache/gateway"
 	"contextcache/mcp"
@@ -96,7 +97,8 @@ func main() {
 	g := gateway.New(cfg, ups)
 	log.Printf("gateway: %d upstreams, %d tools, mode %s", len(ups), g.ToolCount(), *mode)
 	if *httpAddr != "" {
-		log.Fatal(http.ListenAndServe(*httpAddr, mcp.HTTPHandler(g, auth)))
+		srv := &http.Server{Addr: *httpAddr, Handler: mcp.HTTPHandler(g, auth), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
+		log.Fatal(srv.ListenAndServe())
 	}
 	if err := mcp.ServeStdio(ctx, os.Stdin, os.Stdout, g, "stdio"); err != nil {
 		log.Fatal(err)

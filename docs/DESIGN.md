@@ -76,9 +76,9 @@ Every version of a fact is a row with a valid-time interval `[valid_from, valid_
 
 Why bi-temporal: "what was true on March 1" and "what did we believe on March 1" are different questions once corrections exist, and an agent that explains a past decision needs the second. Deletions are honoured because a deleted fact simply has no row valid now; old text that is still similar to the query cannot resurrect it, unlike similarity retrieval over memory texts.
 
-## 7. Interview defence notes
+## 7. Design notes
 
 - *Why bi-temporal?* Corrections. Without valid time, a correction recorded today rewrites history as of today; without transaction time, you cannot reproduce what the agent knew when it acted.
 - *How do you keep deleted facts deleted?* A delete closes the fact's valid interval at the delete time; queries filter by interval, not by similarity. The deletion is itself recorded (transaction time), so "what did we have on record before the delete" still works. The dense similarity baseline shows the failure mode: the old statement of a deleted value stays the nearest neighbour, and only 19% of deleted-fact queries came back empty.
-- *Admission policy, and why not LRU?* Frequency matters more than recency for tools; one-off tools must not evict tools used every few turns. W-TinyLFU gives frequency-based admission with bounded memory and aging.
+- *Admission policy, and why not LRU?* Frequency matters more than recency for tools; one-off tools must not evict tools used every few turns. W-TinyLFU gives frequency-based admission with bounded memory and aging. In the session benchmark it beat LRU inside the split cache, but plain LFU beat it as a cache on its own, and retrieval did most of the work.
 - *How is MemRevise different from LoCoMo and LongMemEval?* It targets revision semantics (current versus past versus as-recorded versus deleted) with exact ground truth from a reference replay, not single final values judged by a model; its histories are long enough (tens of thousands of tokens per user) that putting everything in context stops being an option at scale, and its distractors share vocabulary with the facts.
