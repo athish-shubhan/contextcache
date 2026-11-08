@@ -28,15 +28,22 @@ func (f *farm) Handle(ctx context.Context, s *mcp.Session, method string, params
 	switch method {
 	case "initialize":
 		var p mcp.InitializeParams
-		json.Unmarshal(params, &p)
+		_ = json.Unmarshal(params, &p) // a missing version negotiates the newest
 		return mcp.InitializeResult{ProtocolVersion: mcp.Negotiate(p.ProtocolVersion), Capabilities: map[string]any{"tools": map[string]any{}},
 			ServerInfo: mcp.Implementation{Name: "toolfarm", Version: "0.1"}}, nil
 	case "ping":
 		return struct{}{}, nil
 	case "tools/list":
 		var p mcp.ListToolsParams
-		json.Unmarshal(params, &p)
-		start, _ := strconv.Atoi(p.Cursor)
+		_ = json.Unmarshal(params, &p)
+		start := 0
+		if p.Cursor != "" {
+			var err error
+			// an out-of-range cursor used to panic on the slice below
+			if start, err = strconv.Atoi(p.Cursor); err != nil || start < 0 || start > len(f.tools) {
+				return nil, &mcp.Error{Code: mcp.InvalidParams, Message: "invalid cursor"}
+			}
+		}
 		end := min(len(f.tools), start+100)
 		r := mcp.ListToolsResult{Tools: f.tools[start:end]}
 		if end < len(f.tools) {
@@ -105,7 +112,8 @@ func main() {
 func sanitize(s string) string {
 	b := []byte(s)
 	for i, c := range b {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-' || c == '.') {
+		ok := c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-' || c == '.'
+		if !ok {
 			b[i] = '_'
 		}
 	}

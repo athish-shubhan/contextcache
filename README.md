@@ -66,6 +66,24 @@ cmd/        ccgw (gateway), toolfarm (upstream MCP server), ccbench (overload, p
 bench/      prepare.sh (fetch BFCL), run_all.sh, conformance.py (official SDK), plot.py
 ```
 
+## Quick start
+
+Needs Go 1.24+. Runs from a clean clone with the committed `data/catalog.json` (no BFCL download, no Postgres, no model):
+
+```
+git clone https://github.com/athish-shubhan/contextcache && cd contextcache
+go test ./...
+go build -o bin/toolfarm ./cmd/toolfarm && go build -o bin/ccgw ./cmd/ccgw
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"demo","version":"0"}}}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"search_tools","arguments":{"query":"current weather in a city","k":3}}}' \
+  | bin/ccgw -farms 2 -mode meta
+```
+
+The gateway starts two toolfarm upstreams serving the 1,520-tool catalog, answers `initialize`, and returns the top 3 tools for the query. For Streamable HTTP with two tenants: `bin/ccgw -farms 2 -http 127.0.0.1:8090 -tenants 'tokA=acme:farm0;tokB=beta:farm1'`. Each upstream `tools/call` is limited by `-call-timeout` (default 60s; a hung upstream becomes a tool error instead of blocking the caller).
+
+CI (`.github/workflows/ci.yml`) runs gofmt, `go mod tidy -diff`, `go vet`, `go test -race` (with a pgvector Postgres 16 service, so the Postgres store tests run), the stdio smoke test above and golangci-lint on every pull request.
+
 ## Reproduce
 
 ```
@@ -84,5 +102,5 @@ The MemRevise dataset is regenerated deterministically (`data/memrevise/events.j
 - **A neural embedding model**: none could be downloaded. Dense retrieval uses static GloVe vectors with SIF weighting (a 2017 baseline), behind the same `Ranker` interface and pgvector store a modern encoder would use. "Dense lost to BM25" is a result about static word vectors only.
 - **CloudWeGo Eino**: the gateway is plain Go with its own MCP implementation; it is not built on Eino and nothing was contributed to Eino or eino-ext.
 - **Skills**: triggering is measured with tools playing skills (name + description as tier 1), not with a corpus of real SKILL.md files, and the trigger is a retrieval threshold, not a model's decision.
-- **Protocol**: the gateway speaks MCP up to 2025-11-25 and negotiates that version with SDK 2.3.0 (whose newest is 2026-07-28); the gateway has no authentication beyond static bearer tokens and keeps sessions in memory (capped at 10,000); Streamable HTTP is served in JSON-response mode only (no SSE stream, so list_changed is delivered over stdio only).
+- **Protocol**: the gateway speaks MCP up to 2025-11-25 and negotiates that version with SDK 2.3.0 (whose newest is 2026-07-28); the gateway has no authentication beyond static bearer tokens and keeps sessions in memory (capped at 10,000, closed after 30 idle minutes); Streamable HTTP is served in JSON-response mode only (no SSE stream, so list_changed is delivered over stdio only).
 - MemRevise stores receive structured events; extraction from free text and reading answers out of retrieved memories (where LLMs make mistakes) are deliberately outside the benchmark.

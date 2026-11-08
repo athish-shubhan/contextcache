@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Session is one connected client. Notify sends a server-to-client
@@ -21,6 +22,8 @@ type Session struct {
 	Tenant string
 	Notify func(method string, params any)
 	State  any
+
+	lastUsed time.Time // HTTP only: for idle expiry
 }
 
 type Handler interface {
@@ -55,7 +58,7 @@ func ServeStdio(ctx context.Context, r io.Reader, w io.Writer, h Handler, sessio
 	enc := json.NewEncoder(w) // Encode writes one line per message
 	write := func(m any) {
 		wmu.Lock()
-		enc.Encode(m)
+		_ = enc.Encode(m) // a broken stdout ends the session when the reader sees EOF
 		wmu.Unlock()
 	}
 	s := &Session{ID: sessionID}
@@ -91,12 +94,26 @@ func ServeStdio(ctx context.Context, r io.Reader, w io.Writer, h Handler, sessio
 	return sc.Err()
 }
 
+// HTTPOptions bound the sessions an HTTP server keeps. Clients are not
+// obliged to DELETE their session, so without a bound every initialize
+// would stay in memory for the life of the process.
+type HTTPOptions struct {
+	IdleTimeout time.Duration // a session unused this long is closed (0 = never)
+	MaxSessions int           // initialize beyond this many live sessions gets 503 (0 = no limit)
+	now         func() time.Time
+}
+
+// DefaultHTTPOptions closes sessions after 30 idle minutes and keeps at most
+// 10,000.
+var DefaultHTTPOptions = HTTPOptions{IdleTimeout: 30 * time.Minute, MaxSessions: MaxSessions}
+
 // HTTPHandler serves Streamable HTTP in JSON response mode: each POST
 // carries one JSON-RPC message and gets one JSON response. Sessions are
 // identified by the Mcp-Session-Id header issued at initialize. auth maps a
-// bearer token to a tenant; nil means no authentication.
+// bearer token to a tenant; nil means no authentication. Sessions are
+// bounded by DefaultHTTPOptions.
 func HTTPHandler(h Handler, auth func(token string) (string, bool)) http.Handler {
-	return HTTPHandlerLimit(h, auth, MaxSessions)
+	return NewHTTPHandler(h, auth, DefaultHTTPOptions)
 }
 
 // MaxSessions is the default cap on concurrent HTTP sessions.
@@ -105,12 +122,46 @@ const MaxSessions = 10000
 // maxBody bounds a single JSON-RPC request over HTTP.
 const maxBody = 16 << 20
 
-// HTTPHandlerLimit is HTTPHandler with an explicit cap on live sessions;
-// initialize beyond the cap gets 503.
+// HTTPHandlerLimit is HTTPHandler with an explicit cap on live sessions
+// (idle expiry stays at the default); initialize beyond the cap gets 503.
 func HTTPHandlerLimit(h Handler, auth func(token string) (string, bool), maxSessions int) http.Handler {
+	o := DefaultHTTPOptions
+	o.MaxSessions = maxSessions
+	return NewHTTPHandler(h, auth, o)
+}
+
+// NewHTTPHandler is HTTPHandler with explicit session bounds.
+func NewHTTPHandler(h Handler, auth func(token string) (string, bool), o HTTPOptions) http.Handler {
+	if o.now == nil {
+		o.now = time.Now
+	}
 	var mu sync.Mutex
 	sessions := map[string]*Session{}
+	var lastSweep time.Time
+	// expire closes idle sessions; called with mu held, at most once per
+	// tenth of the idle timeout so a busy server does not scan on every call.
+	expire := func(now time.Time) []*Session {
+		if o.IdleTimeout <= 0 || now.Sub(lastSweep) < o.IdleTimeout/10 {
+			return nil
+		}
+		lastSweep = now
+		var gone []*Session
+		for id, s := range sessions {
+			if now.Sub(s.lastUsed) >= o.IdleTimeout {
+				delete(sessions, id)
+				gone = append(gone, s)
+			}
+		}
+		return gone
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		now := o.now()
+		mu.Lock()
+		gone := expire(now)
+		mu.Unlock()
+		for _, s := range gone {
+			h.Closed(s)
+		}
 		tenant := ""
 		if auth != nil {
 			tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -124,11 +175,22 @@ func HTTPHandlerLimit(h Handler, auth func(token string) (string, bool), maxSess
 		switch r.Method {
 		case http.MethodDelete:
 			mu.Lock()
-			if s := sessions[r.Header.Get("Mcp-Session-Id")]; s != nil {
+			s := sessions[r.Header.Get("Mcp-Session-Id")]
+			if s != nil && s.Tenant != tenant {
+				// one tenant must not be able to end another tenant's session
+				mu.Unlock()
+				http.Error(w, "session belongs to another tenant", http.StatusForbidden)
+				return
+			}
+			if s != nil {
 				delete(sessions, s.ID)
-				h.Closed(s)
 			}
 			mu.Unlock()
+			if s == nil {
+				http.Error(w, "unknown or missing Mcp-Session-Id", http.StatusNotFound)
+				return
+			}
+			h.Closed(s)
 			w.WriteHeader(http.StatusOK)
 			return
 		case http.MethodGet:
@@ -151,20 +213,32 @@ func HTTPHandlerLimit(h Handler, auth func(token string) (string, bool), maxSess
 			return
 		}
 		sid := r.Header.Get("Mcp-Session-Id")
-		mu.Lock()
-		s := sessions[sid]
+		var s *Session
 		if m.Method == "initialize" {
-			if len(sessions) >= maxSessions {
-				mu.Unlock()
+			b := make([]byte, 16)
+			if _, err := rand.Read(b); err != nil {
+				http.Error(w, "session id: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			s = &Session{ID: hex.EncodeToString(b), Tenant: tenant, Notify: func(string, any) {}, lastUsed: now}
+			mu.Lock()
+			full := o.MaxSessions > 0 && len(sessions) >= o.MaxSessions
+			if !full {
+				sessions[s.ID] = s
+			}
+			mu.Unlock()
+			if full {
 				http.Error(w, "too many sessions", http.StatusServiceUnavailable)
 				return
 			}
-			b := make([]byte, 16)
-			rand.Read(b)
-			s = &Session{ID: hex.EncodeToString(b), Tenant: tenant, Notify: func(string, any) {}}
-			sessions[s.ID] = s
+		} else {
+			mu.Lock()
+			s = sessions[sid]
+			if s != nil && s.Tenant == tenant {
+				s.lastUsed = now
+			}
+			mu.Unlock()
 		}
-		mu.Unlock()
 		if s == nil {
 			http.Error(w, "unknown or missing Mcp-Session-Id", http.StatusNotFound)
 			return
@@ -186,5 +260,5 @@ func HTTPHandlerLimit(h Handler, auth func(token string) (string, bool), maxSess
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v)
 }
